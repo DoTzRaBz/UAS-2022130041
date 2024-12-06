@@ -9,18 +9,61 @@ use Illuminate\Http\Request;
 
 class SaleController extends Controller
 {
-    public function index()
-    {
-        $sales = Sale::with(['customer', 'film'])->latest()->get();
+    public function index(Request $request)
+{
+    // Query dasar dengan eager loading
+    $query = Sale::with(['customer', 'film']);
 
-        $totalCustomers = Customer::count();
-        $totalRevenue = Sale::sum('total_price');
-        $totalSales = Sale::count();
-        $averageRevenue = $totalSales > 0 ? $totalRevenue / $totalSales : 0;
-
-        return view('sales.index', compact('sales', 'totalCustomers', 'totalRevenue', 'totalSales', 'averageRevenue'));
+    // Filter berdasarkan payment status
+    if ($request->has('payment_status') && $request->payment_status != '') {
+        $query->where('payment_status', $request->payment_status);
     }
 
+    // Global search
+    if ($request->has('search') && $request->search != '') {
+        $search = $request->search;
+        $query->where(function($q) use ($search) {
+            $q->whereHas('customer', function($subQuery) use ($search) {
+                $subQuery->where('name', 'like', "%{$search}%");
+            })
+            ->orWhereHas('film', function($subQuery) use ($search) {
+                $subQuery->where('title', 'like', "%{$search}%");
+            })
+            ->orWhere('total_price', 'like', "%{$search}%");
+        });
+    }
+
+    // Sorting
+    $sortField = $request->get('sort', 'created_at');
+    $sortDirection = $request->get('direction', 'desc');
+
+    // Validasi kolom sorting
+    $allowedSorts = ['created_at', 'total_price', 'quantity'];
+    $sortField = in_array($sortField, $allowedSorts) ? $sortField : 'created_at';
+
+    $query->orderBy($sortField, $sortDirection);
+
+    // Pagination dengan appends
+    $sales = $query->paginate(10)->appends($request->query());
+
+    // Statistik
+    $totalCustomers = Customer::count();
+    $totalRevenue = Sale::sum('total_price');
+    $totalSales = Sale::count();
+    $averageRevenue = $totalSales > 0 ? $totalRevenue / $totalSales : 0;
+
+    // Ambil distinct values untuk filter
+    $paymentStatuses = Sale::distinct('payment_status')->pluck('payment_status');
+
+    return view('sales.index', compact(
+        'sales',
+        'totalCustomers',
+        'totalRevenue',
+        'totalSales',
+        'averageRevenue',
+        'paymentStatuses'
+    ));
+}
     public function create()
     {
         $customers = Customer::all();

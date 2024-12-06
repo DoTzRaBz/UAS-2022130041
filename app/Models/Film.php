@@ -11,7 +11,7 @@ class Film extends Model
 
     protected $fillable = [
         'title',
-        'genre',
+        'genre_id',
         'director',
         'release_year',
         'rating',
@@ -22,6 +22,13 @@ class Film extends Model
         'poster'
     ];
 
+
+
+    public function genre()
+    {
+        return $this->belongsTo(Genre::class);
+    }
+
     public function rentals()
     {
         return $this->hasMany(Rental::class);
@@ -31,4 +38,23 @@ class Film extends Model
     {
         return $this->hasMany(Sale::class);
     }
+    public function isAvailable()
+{
+    return $this->stock > 0;
+}
+
+public function reduceStock()
+{
+    if ($this->isAvailable()) {
+        $this->decrement('stock');
+        return true;
+    }
+    return false;
+}
+
+public function increaseStock()
+{
+    $this->increment('stock');
+}
+
 }

@@ -38,37 +38,50 @@ class RentalController extends Controller
 
         $film = Film::findOrFail($request->film_id);
 
-        if ($film->stock <= 0) {
+        // Gunakan method isAvailable dari model
+        if (!$film->isAvailable()) {
             return back()->with('error', 'Film is out of stock!');
         }
 
-        // Calculate rental fee based on number of days
-        $rentalDate = Carbon::parse($request->rental_date);
-        $returnDate = Carbon::parse($request->return_date);
-        $days = $rentalDate->diffInDays($returnDate);
-        $rentalFee = $film->rental_price * $days;
+        DB::beginTransaction();
+        try {
+            // Kurangi stok film
+            $film->reduceStock();
 
-        // Create rental
-        $rental = Rental::create([
-            'customer_id' => $request->customer_id,
-            'film_id' => $request->film_id,
-            'rental_date' => $request->rental_date,
-            'return_date' => $request->return_date,
-            'rental_fee' => $rentalFee,
-            'status' => 'ongoing'
-        ]);
+            // Calculate rental fee based on number of days
+            $rentalDate = Carbon::parse($request->rental_date);
+            $returnDate = Carbon::parse($request->return_date);
+            $days = $rentalDate->diffInDays($returnDate);
+            $rentalFee = $film->rental_price * $days;
 
-        Sale::create([
-            'customer_id' => $request->customer_id,
-            'film_id' => $request->film_id,
-            'quantity' => 1,
-            'total_price' => $rentalFee,
-            'payment_status' => 'pending',
-            'status' => 'ongoing',
-            'rental_id' => $rental->id
-        ]);
+            // Create rental
+            $rental = Rental::create([
+                'customer_id' => $request->customer_id,
+                'film_id' => $request->film_id,
+                'rental_date' => $request->rental_date,
+                'return_date' => $request->return_date,
+                'rental_fee' => $rentalFee,
+                'status' => 'ongoing'
+            ]);
 
-        return redirect()->route('rentals.index')->with('success', 'Rental created successfully!');
+            Sale::create([
+                'customer_id' => $request->customer_id,
+                'film_id' => $request->film_id,
+                'quantity' => 1,
+                'total_price' => $rentalFee,
+                'payment_status' => 'pending',
+                'status' => 'ongoing',
+                'rental_id' => $rental->id
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('rentals.index')->with('success', 'Rental created successfully!');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Rental creation error: ' . $e->getMessage());
+            return back()->with('error', 'Failed to create rental. Please try again.');
+        }
     }
 
     public function processReturn(Rental $rental)
@@ -82,6 +95,8 @@ class RentalController extends Controller
     try {
         $today = Carbon::today();
         $lateFee = 0;
+
+        // Hitung denda keterlambatan
         if ($today->isAfter($rental->return_date)) {
             $daysLate = $today->diffInDays($rental->return_date);
             $lateFee = $daysLate * ($rental->film->rental_price * 0.1);
@@ -102,14 +117,17 @@ class RentalController extends Controller
             ]);
         }
 
-        $rental->film->increment('stock');
+        // Kembalikan stok film
+        $rental->film->increaseStock();
 
         DB::commit();
 
         return redirect()->route('rentals.index')
-            ->with('success', 'Film returned successfully! ' . ($lateFee > 0 ? 'Late fee: $' . number_format($lateFee, 2) : ''));
+            ->with('success', 'Film returned successfully! ' .
+                   ($lateFee > 0 ? 'Late fee: $' . number_format($lateFee, 2) : ''));
     } catch (\Exception $e) {
         DB::rollBack();
+        Log::error('Rental return error: ' . $e->getMessage());
         return redirect()->route('rentals.index')
             ->with('error', 'An error occurred while processing the return. Please try again.');
     }

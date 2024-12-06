@@ -24,14 +24,12 @@
         </div>
 
         <div class="mb-3">
-            <label for="genre" class="form-label">Genre</label>
-            <select class="form-control" id="genre" name="genre" required>
-                <option value="">Select Genre</option>
-                <option value="Action">Action</option>
-                <option value="Comedy">Comedy</option>
-                <option value="Drama">Drama</option>
-                <option value="Horror">Horror</option>
-                <option value="Sci-Fi">Sci-Fi</option>
+            <label for="genre_id" class="form-label">Genre</label>
+            <select class="form-control" id="genre_id" name="genre_id" required>
+                <option value="" selected>Select Genre</option>
+                @foreach($genres as $genre)
+                    <option value="{{ $genre->id }}">{{ $genre->name }}</option>
+                @endforeach
             </select>
         </div>
 

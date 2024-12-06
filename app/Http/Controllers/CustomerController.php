@@ -4,12 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use Illuminate\Http\Request;
-
+use Illuminate\Support\Facades\Storage;
 class CustomerController extends Controller
 {
     public function index()
     {
-        $customers = Customer::latest()->paginate(10);
+        $customers = Customer::latest()->paginate(12);
         return view('customers.index', compact('customers'));
     }
 
@@ -51,16 +51,32 @@ class CustomerController extends Controller
     }
 
     public function update(Request $request, Customer $customer)
-    {
-        $validated = $request->validate([
-            'phone' => 'required|string',
-            'address' => 'required',
-            'member_status' => 'required|in:regular,premium'
-        ]);
+{
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'email' => 'required|string|email|max:255|unique:customers,email,'.$customer->id,
+        'phone' => 'required|string|max:20',
+        'address' => 'required|string',
+        'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+    ]);
 
-        $customer->update($validated);
-        return redirect()->route('customers.index')->with('success', 'Customer updated successfully');
+    // Jika ada file foto baru
+    if ($request->hasFile('photo')) {
+        // Hapus foto lama jika ada
+        if ($customer->photo) {
+            Storage::disk('public')->delete($customer->photo);
+        }
+
+        // Simpan foto baru
+        $photoPath = $request->file('photo')->store('customers', 'public');
+        $validated['photo'] = $photoPath;
     }
+
+    // Update customer
+    $customer->update($validated);
+
+    return redirect()->route('customers.index')->with('success', 'Customer updated successfully');
+}
 
     public function destroy(Customer $customer)
     {

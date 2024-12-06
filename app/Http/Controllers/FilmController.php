@@ -9,15 +9,59 @@ use Illuminate\Support\Facades\Storage;
 
 class FilmController extends Controller
 {
-    public function index()
-    {
-        $films = Film::all();
-        return view('films.index', compact('films'));
+    public function index(Request $request)
+{
+    $query = Film::query();
+
+    // Search functionality
+    if ($request->has('search')) {
+        $search = $request->input('search');
+        $query->where(function($q) use ($search) {
+            $q->where('title', 'like', "%{$search}%")
+              ->orWhere('description', 'like', "%{$search}%")
+              ->orWhere('release_year', 'like', "%{$search}%")
+              ->orWhereHas('genre', function($genre) use ($search) {
+                  $genre->where('name', 'like', "%{$search}%");
+              });
+        });
     }
 
-    public function create()
+    // Genre filter
+    if ($request->has('genre') && $request->input('genre')) {
+        $query->where('genre_id', $request->input('genre'));
+    }
+
+    // Sorting
+    switch ($request->input('sort')) {
+        case 'rating':
+            $query->orderBy('rating', 'desc');
+            break;
+        case 'title':
+            $query->orderBy('title', 'asc');
+            break;
+        case 'release_year':
+            $query->orderBy('release_year', 'desc');
+            break;
+        case 'price':
+            $query->orderBy('price', 'asc');
+            break;
+        default:
+            $query->latest();
+            break;
+    }
+
+    // Fetch genres for dropdown
+    $genres = Genre::all();
+
+    // Paginate results
+    $films = $query->with('genre')->paginate(10);
+
+    return view('films.index', compact('films', 'genres'));
+}
+  public function create()
     {
         $genres = Genre::all();
+
         return view('films.create', compact('genres'));
     }
 
@@ -25,7 +69,7 @@ class FilmController extends Controller
     {
         $validatedData = $request->validate([
             'title' => 'required|max:255',
-            'genre' => 'required',
+            'genre_id' => 'required|exists:genres,id',
             'director' => 'required|max:255',
             'release_year' => 'required|integer',
             'rating' => 'required|numeric|between:0,10',
@@ -60,7 +104,7 @@ class FilmController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|max:255',
-            'genre' => 'required',
+            'genre_id' => 'required|exists:genres,id',
             'director' => 'required|max:255',
             'release_year' => 'required|numeric',
             'rating' => 'required|numeric|between:0,10',

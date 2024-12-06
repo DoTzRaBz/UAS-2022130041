@@ -2,47 +2,35 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Film;
-use App\Models\Rental;
 use App\Models\Sale;
+use App\Models\Film;
 use App\Models\Customer;
-use Illuminate\Http\Request;
+use App\Models\Rental;
 
 class DashboardController extends Controller
 {
     public function index()
-    {
-        $totalFilms = Film::count();
-        $totalCustomers = Customer::count();
-        $activeRentals = Rental::where('status', 'borrowed')->count();
-        $totalSales = Sale::where('payment_status', 'paid')->sum('total_price');
+{
+    // Ambil data dari Sale Controller
+    $totalCustomers = Customer::count();
 
-        $recentRentals = Rental::with(['customer', 'film'])
-            ->latest()
-            ->take(5)
-            ->get();
+    // Hanya hitung sales yang sudah dibayar
+    $totalRevenue = Sale::where('payment_status', 'paid')->sum('total_price');
+    $totalSales = Sale::where('payment_status', 'paid')->count();
 
-        $recentSales = Sale::with(['customer', 'film'])
-            ->latest()
-            ->take(5)
-            ->get();
+    $averageRevenue = $totalSales > 0 ? $totalRevenue / $totalSales : 0;
 
-        $lowStockFilms = Film::where('stock', '<', 5)->get();
+    // Tambahan data untuk dashboard
+    $totalFilms = Film::count();
+    $activeRentals = Rental::where('status', 'ongoing')->count();
 
-        return view('dashboard', compact(
-            'totalFilms',
-            'totalCustomers',
-            'activeRentals',
-            'totalSales',
-            'recentRentals',
-            'recentSales',
-            'lowStockFilms'
-        ));
-    }
-
-    public function reports()
-    {
-        // Logic untuk generate laporan
-        return view('reports');
-    }
+    return view('dashboard', [
+        'totalCustomers' => $totalCustomers,
+        'totalRevenue' => $totalRevenue,
+        'totalSales' => $totalSales,
+        'averageRevenue' => $averageRevenue,
+        'totalFilms' => $totalFilms,
+        'activeRentals' => $activeRentals
+    ]);
+}
 }
